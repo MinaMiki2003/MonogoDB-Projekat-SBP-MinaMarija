@@ -126,15 +126,7 @@ def q2_publications_activity():
     ]
     return "Mina_Q2_publikacije_aktivnost", pipeline, "reviews"
 
-
 def q3_top_critics_vs_regular_deviation():
-    """
-    PITANJE (uloga: menadžer produkcije): Da li top kritičari više odstupaju
-    od mišljenja publike nego regularni kritičari? (Koliko verovati
-    kritičarskim ocenama pri proceni tržišnog prijema filma.)
-
-    USKO GRLO: $lookup iz reviews (1.4M) ka movies BEZ indeksa.
-    """
     pipeline = [
         {"$lookup": {
             "from": "movies",
@@ -143,6 +135,7 @@ def q3_top_critics_vs_regular_deviation():
             "as": "movieInfo",
         }},
         {"$unwind": "$movieInfo"},
+        {"$match": {"review_score": {"$gte": 0, "$lte": 1}}},
         {"$project": {
             "top_critic": 1,
             "deviation": {
@@ -162,7 +155,6 @@ def q3_top_critics_vs_regular_deviation():
         {"$sort": {"avgDeviation": -1}},
     ]
     return "Mina_Q3_top_kriticari_odstupanje", pipeline, "reviews"
-
 
 def q4_review_scores_by_decade():
     """
