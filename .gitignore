@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Veliki podaci - CSV sa Kaggle-a (preko 100MB)
+data/
+
+# Metabase (jar je 386MB, baza se sama generiše)
+metabase/metabase.jar
+metabase/metabase.db.*
+metabase/plugins/
+
+# Sirovi explain JSON izlazi (mogu biti veliki, tabela ostaje)
+results/explain_unoptimized/
+results/explain_optimized/
+
+# OS
+.DS_Store
+Thumbs.db

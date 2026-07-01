@@ -200,30 +200,37 @@ def parse_original_score(value) -> float | None:
       '3/5'    -> 0.6
       '85/100' -> 0.85
       'B+'     -> 0.85 (mapa slovnih ocena)
-      '4 stars' / '4/5 stars' -> pokušaj parsiranja razlomka
-    Ako format nije prepoznat, vraća None (NE nulu - nepoznato != najgore).
+    Ako format nije prepoznat ILI je rezultat van validnog opsega [0, 1],
+    vraća None (nepoznato != najgore; nevalidna ocena se odbacuje).
     """
     if pd.isna(value):
         return None
     value = str(value).strip()
 
+    result = None
+
     # Format "x/y"
     fraction_match = re.match(r"^(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)", value)
     if fraction_match:
         numerator, denominator = map(float, fraction_match.groups())
-        if denominator > 0:
-            return round(numerator / denominator, 4)
+        # denominator mora biti smislen (>= 1), inače je greška u podacima
+        if denominator >= 1:
+            result = round(numerator / denominator, 4)
 
     # Format slovne ocene (A+, B-, C, ...)
-    upper_val = value.upper().replace(" ", "")
-    if upper_val in LETTER_GRADE_MAP:
-        return LETTER_GRADE_MAP[upper_val]
+    if result is None:
+        upper_val = value.upper().replace(" ", "")
+        if upper_val in LETTER_GRADE_MAP:
+            result = LETTER_GRADE_MAP[upper_val]
 
     # Format čistog broja 0-100 (pretpostavka: procenat)
-    if re.match(r"^\d+(\.\d+)?$", value):
+    if result is None and re.match(r"^\d+(\.\d+)?$", value):
         number = float(value)
-        return round(number / 100, 4) if number > 1 else number
+        result = round(number / 100, 4) if number > 1 else number
 
+    # ZAŠTITA: rezultat mora biti u validnom opsegu [0, 1].
+    if result is not None and 0.0 <= result <= 1.0:
+        return result
     return None
 
 

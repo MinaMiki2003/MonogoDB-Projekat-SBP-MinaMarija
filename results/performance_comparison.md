@@ -1,0 +1,9 @@
+# Uporedna analiza performansi - pre i posle optimizacije
+
+| Upit | Pre optimizacije (ms) | Posle optimizacije (ms) | Poboljšanje (%) | DocsExamined pre | DocsExamined posle |
+|---|---|---|---|---|---|
+| Mina_Q1_zanrovi_najvisi_tomatometer | 22178 | 144 | 99.4% | 3145452 | 15334 |
+| Mina_Q2_publikacije_aktivnost | 340965 | 7918 | 97.7% | 4304072 | 138154 |
+| Mina_Q3_top_kriticari_odstupanje | 306404 | 74931 | 75.5% | 4304072 | 1714413 |
+| Mina_Q4_ocene_po_deceniji | 574205 | 3060 | 99.5% | 4304072 | 61002 |
+| Mina_Q5_raskorak_kritika_publika | 20219 | 98 | 99.5% | 3145452 | 30088 |
