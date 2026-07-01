@@ -76,38 +76,90 @@ def q2_publications_activity():
     return "Mina_Q2_OPT_publikacije_aktivnost", pipeline, "movies_with_stats"
 
 
-
 def q3_top_critics_vs_regular_deviation():
     """
-    NAMERNO ZADRŽAVA $lookup - demonstracija spajanja kolekcija (movies_with_stats
-    + reviews). Ovde se NE očekuje IXSCAN na glavnoj kolekciji - svesna odluka.
-    $lookup interno koristi indeks na reviews.ratingKey (foreignField).
+    OPTIMIZOVANI Q3: koristi ugnježdene recenzije umesto $lookup-a.
+    $match filtrira valjane review_score (0-1) pre računanja odstupanja.
     """
     pipeline = [
-        {"$lookup": {
-            "from": "reviews",
-            "localField": "ratingKey",
-            "foreignField": "ratingKey",
-            "as": "joinedReviews",
-        }},
-        {"$unwind": "$joinedReviews"},
-        {"$project": {
-            "top_critic": "$joinedReviews.top_critic",
-            "deviation": {
-                "$abs": {"$subtract": [
-                    {"$multiply": ["$joinedReviews.review_score", 100]},
-                    "$audienceScore",
-                ]}
-            },
-        }},
+        {"$unwind": "$reviews"},
+        {"$match": {"reviews.review_score": {"$gte": 0, "$lte": 1}}},
         {"$group": {
-            "_id": "$top_critic",
-            "avgDeviation": {"$avg": "$deviation"},
+            "_id": "$reviews.top_critic",
+            "avgDeviation": {
+                "$avg": {
+                    "$abs": {"$subtract": [
+                        {"$multiply": ["$reviews.review_score", 100]},
+                        "$audienceScore",
+                    ]}
+                }
+            },
             "reviewCount": {"$sum": 1},
         }},
         {"$sort": {"avgDeviation": -1}},
     ]
-    return "Mina_Q3_OPT_top_kriticari_odstupanje_LOOKUP", pipeline, "movies_with_stats"
+    return "Mina_Q3_OPT_top_kriticari_odstupanje", pipeline, "movies_with_stats"
+
+# def q3_top_critics_vs_regular_deviation():
+#     """
+#   # Stara verzija sa $lookup-om - demonstrira indeksiranje na spajanju preko
+#     reviews.ratingKey, ali je bila ~100s pa sam presla na denormalizaciju gore.
+
+
+#     pipeline = [
+#         {"$match": {"reviewCount": {"$gt": 0}}},
+#         {"$unwind": "$reviews"},
+#         {"$match": {"reviews.review_score": {"$gte": 0, "$lte": 1}}},
+#         {"$project": {
+#             "top_critic": "$reviews.top_critic",
+#             "deviation": {
+#                 "$abs": {"$subtract": [
+#                     {"$multiply": ["$reviews.review_score", 100]},
+#                     "$audienceScore",
+#                 ]}
+#             },
+#         }},
+#         {"$group": {
+#             "_id": "$top_critic",
+#             "avgDeviation": {"$avg": "$deviation"},
+#             "reviewCount": {"$sum": 1},
+#         }},
+#         {"$sort": {"avgDeviation": -1}},
+#     ]
+#     return "Mina_Q3_OPT_top_kriticari_odstupanje", pipeline, "movies_with_stats"
+
+#jako sporo izvrsava zbog lookapa nedovoljna optimizacjia
+# def q3_top_critics_vs_regular_deviation():
+#     """
+#     NAMERNO ZADRŽAVA $lookup - demonstracija spajanja kolekcija (movies_with_stats
+#     + reviews). Ovde se NE očekuje IXSCAN na glavnoj kolekciji - svesna odluka.
+#     $lookup interno koristi indeks na reviews.ratingKey (foreignField).
+#     """
+#     pipeline = [
+#         {"$lookup": {
+#             "from": "reviews",
+#             "localField": "ratingKey",
+#             "foreignField": "ratingKey",
+#             "as": "joinedReviews",
+#         }},
+#         {"$unwind": "$joinedReviews"},
+#         {"$project": {
+#             "top_critic": "$joinedReviews.top_critic",
+#             "deviation": {
+#                 "$abs": {"$subtract": [
+#                     {"$multiply": ["$joinedReviews.review_score", 100]},
+#                     "$audienceScore",
+#                 ]}
+#             },
+#         }},
+#         {"$group": {
+#             "_id": "$top_critic",
+#             "avgDeviation": {"$avg": "$deviation"},
+#             "reviewCount": {"$sum": 1},
+#         }},
+#         {"$sort": {"avgDeviation": -1}},
+#     ]
+#     return "Mina_Q3_OPT_top_kriticari_odstupanje_LOOKUP", pipeline, "movies_with_stats"
 
 
 def q4_review_scores_by_decade():
