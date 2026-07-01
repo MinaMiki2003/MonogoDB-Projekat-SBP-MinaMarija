@@ -14,16 +14,8 @@ pa se mere optimizovane verzije. Time se dobija poštena "pre/posle" slika.
 
 from datetime import datetime
 
-
+#verzija sa filterom da bi uzeli u obzir samo žanrove koji imaju bar 10 filmova
 def q1_genres_best_tomatometer_min50_reviews():
-    """
-    PITANJE (uloga: menadžer produkcije): Koji žanrovi filmova imaju najviši
-    prosečan TomatoMeter među filmovima koji imaju najmanje 50 kritičarskih
-    recenzija? (Na koje žanrove se isplati fokusirati produkciju.)
-
-    USKO GRLO: $lookup nad reviews kolekcijom (1.4M dokumenata) BEZ indeksa na
-    reviews.ratingKey -> za svaki film COLLSCAN cele reviews kolekcije.
-    """
     pipeline = [
         {"$lookup": {
             "from": "reviews",
@@ -31,7 +23,11 @@ def q1_genres_best_tomatometer_min50_reviews():
             "foreignField": "ratingKey",
             "as": "movieReviews",
         }},
-        {"$addFields": {"reviewCount": {"$size": "$movieReviews"}}},
+        {"$project": {
+            "genre": 1,
+            "tomatoMeter": 1,
+            "reviewCount": {"$size": "$movieReviews"},
+        }},
         {"$match": {"reviewCount": {"$gte": 50}}},
         {"$unwind": "$genre"},
         {"$group": {
@@ -39,10 +35,67 @@ def q1_genres_best_tomatometer_min50_reviews():
             "avgTomatoMeter": {"$avg": "$tomatoMeter"},
             "movieCount": {"$sum": 1},
         }},
+        {"$match": {"movieCount": {"$gte": 10}}},
         {"$project": {"_id": 0, "genre": "$_id", "avgTomatoMeter": 1, "movieCount": 1}},
         {"$sort": {"avgTomatoMeter": -1}},
     ]
     return "Mina_Q1_zanrovi_najvisi_tomatometer", pipeline, "movies"
+
+#verzija Q1 bez $addfields bez filtera za >10
+
+# def q1_genres_best_tomatometer_min50_reviews():
+#     pipeline = [
+#         {"$lookup": {
+#             "from": "reviews",
+#             "localField": "ratingKey",
+#             "foreignField": "ratingKey",
+#             "as": "movieReviews",
+#         }},
+#         {"$project": {
+#             "genre": 1,
+#             "tomatoMeter": 1,
+#             "reviewCount": {"$size": "$movieReviews"},
+#         }},
+#         {"$match": {"reviewCount": {"$gte": 50}}},
+#         {"$unwind": "$genre"},
+#         {"$group": {
+#             "_id": "$genre",
+#             "avgTomatoMeter": {"$avg": "$tomatoMeter"},
+#             "movieCount": {"$sum": 1},
+#         }},
+#         {"$project": {"_id": 0, "genre": "$_id", "avgTomatoMeter": 1, "movieCount": 1}},
+#         {"$sort": {"avgTomatoMeter": -1}},
+#     ]
+#     return "Mina_Q1_zanrovi_najvisi_tomatometer", pipeline, "movies"
+
+# def q1_genres_best_tomatometer_min50_reviews():
+#     """
+#     PITANJE (uloga: menadžer produkcije): Koji žanrovi filmova imaju najviši
+#     prosečan TomatoMeter među filmovima koji imaju najmanje 50 kritičarskih
+#     recenzija? (Na koje žanrove se isplati fokusirati produkciju.)
+
+#     USKO GRLO: $lookup nad reviews kolekcijom (1.4M dokumenata) BEZ indeksa na
+#     reviews.ratingKey -> za svaki film COLLSCAN cele reviews kolekcije.
+#     """
+#     pipeline = [
+#         {"$lookup": {
+#             "from": "reviews",
+#             "localField": "ratingKey",
+#             "foreignField": "ratingKey",
+#             "as": "movieReviews",
+#         }},
+#         {"$addFields": {"reviewCount": {"$size": "$movieReviews"}}},
+#         {"$match": {"reviewCount": {"$gte": 50}}},
+#         {"$unwind": "$genre"},
+#         {"$group": {
+#             "_id": "$genre",
+#             "avgTomatoMeter": {"$avg": "$tomatoMeter"},
+#             "movieCount": {"$sum": 1},
+#         }},
+#         {"$project": {"_id": 0, "genre": "$_id", "avgTomatoMeter": 1, "movieCount": 1}},
+#         {"$sort": {"avgTomatoMeter": -1}},
+#     ]
+#     return "Mina_Q1_zanrovi_najvisi_tomatometer", pipeline, "movies"
 
 
 def q2_publications_activity():

@@ -15,11 +15,46 @@ def q1_genres_best_tomatometer_min50_reviews():
             "avgTomatoMeter": {"$avg": "$tomatoMeter"},
             "movieCount": {"$sum": 1},
         }},
+        {"$match": {"movieCount": {"$gte": 10}}},
         {"$project": {"_id": 0, "genre": "$_id", "avgTomatoMeter": 1, "movieCount": 1}},
         {"$sort": {"avgTomatoMeter": -1}},
     ]
     return "Mina_Q1_OPT_zanrovi_najvisi_tomatometer", pipeline, "movies_with_stats"
+#zakoment verzija bez filter
+# def q1_genres_best_tomatometer_min50_reviews():
+#     """
+#     INDEKS: { reviewCount: 1 }
+#     $match {reviewCount >= 50} PRVA faza -> IXSCAN na reviewCount.
+#     """
+#     pipeline = [
+#         {"$match": {"reviewCount": {"$gte": 50}}},
+#         {"$unwind": "$genre"},
+#         {"$group": {
+#             "_id": "$genre",
+#             "avgTomatoMeter": {"$avg": "$tomatoMeter"},
+#             "movieCount": {"$sum": 1},
+#         }},
+#         {"$project": {"_id": 0, "genre": "$_id", "avgTomatoMeter": 1, "movieCount": 1}},
+#         {"$sort": {"avgTomatoMeter": -1}},
+#     ]
+#     return "Mina_Q1_OPT_zanrovi_najvisi_tomatometer", pipeline, "movies_with_stats"
 
+# def q2_publications_activity():
+#     """
+#     OPTIMIZOVANI Q2: nad movies_with_stats. $unwind ugnježdenih recenzija pa
+#     grupisanje po publikaciji - bez $lookup-a.
+#     """
+#     pipeline = [
+#         {"$unwind": "$reviews"},
+#         {"$group": {
+#             "_id": "$reviews.publicatioName",
+#             "totalReviews": {"$sum": 1},
+#             "avgReviewScore": {"$avg": "$reviews.review_score"},
+#         }},
+#         {"$match": {"totalReviews": {"$gte": 50}}},
+#         {"$sort": {"totalReviews": -1}},
+#     ]
+#     return "Mina_Q2_OPT_publikacije_aktivnost", pipeline, "movies_with_stats"
 
 def q2_publications_activity():
     """
@@ -32,8 +67,8 @@ def q2_publications_activity():
         {"$group": {
             "_id": "$reviews.publicatioName",
             "totalReviews": {"$sum": 1},
-            "avgReviewScore": {"$avg": "$reviews.review_score"},
-            "avgMovieTomato": {"$avg": "$tomatoMeter"},
+           # "avgReviewScore": {"$avg": "$reviews.review_score"},
+           # "avgMovieTomato": {"$avg": "$tomatoMeter"},
         }},
         {"$match": {"totalReviews": {"$gte": 50}}},
         {"$sort": {"totalReviews": -1}},
