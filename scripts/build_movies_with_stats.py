@@ -1,17 +1,13 @@
 """
 Izgradnja optimizovane, denormalizovane kolekcije `movies_with_stats` iz
-postojećih `movies` + `reviews` kolekcija (koristi $merge da rezultat
-agregacionog pipeline-a upiše direktno u novu kolekciju - ovo se izvršava
-na strani MongoDB servera, bez vraćanja podataka u Python proces).
+postojećih `movies` + `reviews` kolekcija
+Koristi $merge da rezultat agregacionog pipeline-a upiše direktno u novu kolekciju .
 
-Pokretanje (NAKON što su movies i reviews već uvezeni preko etl.py):
-    python scripts/build_movies_with_stats.py --mongo-uri mongodb://localhost:27017 --db rt_analytics
 """
-
 import argparse
 from pymongo import MongoClient
 
-# Koliko najnovijih recenzija ugnježdavamo po filmu (videti docs/06 - 16MB limit)
+# Koliko najnovijih recenzija ugnježdavamo po filmu 
 EMBEDDED_REVIEWS_LIMIT = 50
 
 
