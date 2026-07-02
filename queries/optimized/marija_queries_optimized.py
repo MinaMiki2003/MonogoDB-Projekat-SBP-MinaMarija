@@ -1,107 +1,67 @@
 """
-Agregacioni upiti - MARIJA OLIĆ - OPTIMIZOVANA šema, verzija sa INDEKSIMA.
+Agregacioni upiti - MARIJA OLIĆ (uloga: analitičar podataka)
+Šema: OPTIMIZOVANA (movies_with_stats, denormalizovana + indeksi)
 
-Svaki upit (osim Q4 koji namerno zadržava $lookup kao demonstraciju spajanja
-kolekcija) POČINJE sa $match nad INDEKSIRANIM poljem -> IXSCAN.
+RAZNOVRSNOST OPTIMIZACIJA - svaki upit demonstrira DRUGAČIJI koncept:
+  Q1 - COMPOUND indeks (ESR pravilo): {studio:1, reviewCount:-1}
+  Q2 - SINGLE-FIELD indeks: {rating:1}
+  Q3 - $lookup + indeks na foreignField (reviews.ratingKey) - demo spajanja
+  Q4 - MULTIKEY indeks nad UGNJEŽDENIM poljem: {reviews.scoreSentiment:1}
+  Q5 - PARTIAL indeks (indeks samo nad podskupom) + $bucket
 """
 
-from datetime import datetime, timedelta
-
-CERTIFIED_FRESH_THRESHOLD = 75
+from datetime import datetime
 
 
-def q1_studios_highest_audience_lowest_variance(min_movies: int = 20):
+def q1_studios_activity_quality():
     """
-    KOLEKCIJA: movies_slim (vitka kolekcija BEZ ugnježdenih recenzija).
-    INDEKS: { audienceScore: 1 } nad movies_slim.
-    Pošto movies_slim dokumenti NE sadrže težak reviews niz, čitanje je
-    brzo - ovaj upit je sada BRŽI od neoptimizovane verzije. $match
-    {audienceScore >= 0} PRVA faza -> IXSCAN.
+    OPTIMIZACIJA: COMPOUND indeks {studio:1, reviewCount:-1} (ESR pravilo).
+    $match {studio != Unknown, reviewCount > 0} PRVA faza -> IXSCAN preko
+    compound indeksa. E (equality) = studio, R (range) = reviewCount.
+    Grupiše ugnježdene recenzije po studiju.
     """
     pipeline = [
-        {"$match": {"audienceScore": {"$gte": 0}, "studio": {"$ne": "Unknown"}}},
+        {"$match": {"studio": {"$ne": "Unknown"}, "reviewCount": {"$gt": 0}}},
+        {"$unwind": "$reviews"},
         {"$group": {
             "_id": "$studio",
+            "totalReviews": {"$sum": 1},
+            "avgReviewScore": {"$avg": "$reviews.review_score"},
+            "avgTomatoMeter": {"$avg": "$tomatoMeter"},
+        }},
+        {"$match": {"totalReviews": {"$gte": 100}}},
+        {"$sort": {"totalReviews": -1}},
+    ]
+    return "Marija_Q1_OPT_studiji_aktivnost_kvalitet", pipeline, "movies_with_stats"
+
+
+def q2_reception_by_mpaa_rating():
+    """
+    OPTIMIZACIJA: SINGLE-FIELD indeks {rating:1}.
+    $match {rating != null} PRVA faza -> IXSCAN preko rating indeksa.
+    Grupiše po MPAA rating-u iz ugnježdenih recenzija.
+    """
+    pipeline = [
+        {"$match": {"rating": {"$ne": None}}},
+        {"$unwind": "$reviews"},
+        {"$group": {
+            "_id": "$rating",
+            "totalReviews": {"$sum": 1},
+            "avgReviewScore": {"$avg": "$reviews.review_score"},
+            "avgTomatoMeter": {"$avg": "$tomatoMeter"},
             "avgAudienceScore": {"$avg": "$audienceScore"},
-            "stdDev": {"$stdDevPop": "$audienceScore"},
-            "movieCount": {"$sum": 1},
         }},
-        {"$match": {"movieCount": {"$gte": min_movies}}},
-        {"$project": {"_id": 0, "studio": "$_id", "avgAudienceScore": 1,
-                       "stdDev": 1, "movieCount": 1}},
-        {"$sort": {"avgAudienceScore": -1, "stdDev": 1}},
+        {"$sort": {"totalReviews": -1}},
     ]
-    return "Marija_Q1_OPT_studiji_stabilnost", pipeline, "movies_slim"
+    return "Marija_Q2_OPT_prijem_po_mpaa_ratingu", pipeline, "movies_with_stats"
 
 
-def q2_biggest_gap_movies_by_genre(limit: int = 100):
+def q3_strictest_critics():
     """
-    KOLEKCIJA: movies_slim (vitka kolekcija BEZ ugnježdenih recenzija).
-    INDEKS: { tomatoMeter: 1 } nad movies_slim. Pošto dokumenti NE sadrže
-    težak reviews niz, čitanje je brzo -> BRŽE od neoptimizovane verzije.
-    $match {tomatoMeter >= 0} PRVA faza -> IXSCAN.
-    """
-    pipeline = [
-        {"$match": {"tomatoMeter": {"$gt": 0}, "audienceScore": {"$gt": 0}}},
-        {"$project": {
-            "_id": 0, "movie_title": 1, "genre": 1, "tomatoMeter": 1,
-            "audienceScore": 1,
-            "gap": {"$abs": {"$subtract": ["$tomatoMeter", "$audienceScore"]}},
-        }},
-        {"$sort": {"gap": -1}},
-        {"$limit": limit},
-        {"$facet": {
-            "topControversialMovies": [
-                {"$project": {"movie_title": 1, "gap": 1,
-                               "tomatoMeter": 1, "audienceScore": 1}},
-            ],
-            "genreDistribution": [
-                {"$unwind": "$genre"},
-                {"$group": {"_id": "$genre", "count": {"$sum": 1}}},
-                {"$sort": {"count": -1}},
-            ],
-        }},
-    ]
-    return "Marija_Q2_OPT_najveci_raskorak_po_zanru", pipeline, "movies_slim"
-
-
-def q3_certified_fresh_effect_by_genre():
-    """
-    INDEKS: { tomatoMeter: 1 }
-    $match {tomatoMeter != null} PRVA faza -> IXSCAN (već je radilo i ranije).
-    """
-    pipeline = [
-        {"$match": {"tomatoMeter": {"$gt": 0}, "audienceScore": {"$gt": 0}}},
-        {"$addFields": {
-            "certifiedFresh": {"$gte": ["$tomatoMeter", CERTIFIED_FRESH_THRESHOLD]}
-        }},
-        {"$unwind": "$genre"},
-        {"$facet": {
-            "byGenre": [
-                {"$group": {
-                    "_id": {"genre": "$genre", "certifiedFresh": "$certifiedFresh"},
-                    "avgAudienceScore": {"$avg": "$audienceScore"},
-                    "movieCount": {"$sum": 1},
-                }},
-                {"$sort": {"_id.genre": 1, "_id.certifiedFresh": -1}},
-            ],
-            "overall": [
-                {"$group": {
-                    "_id": "$certifiedFresh",
-                    "avgAudienceScore": {"$avg": "$audienceScore"},
-                    "movieCount": {"$sum": 1},
-                }},
-            ],
-        }},
-    ]
-    return "Marija_Q3_OPT_certified_fresh_efekat", pipeline, "movies_with_stats"
-
-
-def q4_fresh_rotten_distribution_by_rating_and_genre():
-    """
-    NAMERNO ZADRŽAVA $lookup - demonstracija spajanja kolekcija (movies_with_stats
-    + reviews). Ovde se NE očekuje IXSCAN na glavnoj kolekciji - svesna odluka.
-    $lookup interno koristi indeks na reviews.ratingKey (foreignField).
+    OPTIMIZACIJA: $lookup + indeks na foreignField (reviews.ratingKey).
+    NAMERNO zadržava $lookup kao demonstraciju spajanja kolekcija. Na glavnoj
+    kolekciji je COLLSCAN (svesna odluka), ali $lookup interno koristi indeks
+    na reviews.ratingKey - vidi se po totalKeysExamined > 0.
     """
     pipeline = [
         {"$lookup": {
@@ -111,64 +71,65 @@ def q4_fresh_rotten_distribution_by_rating_and_genre():
             "as": "joinedReviews",
         }},
         {"$unwind": "$joinedReviews"},
-        {"$unwind": "$genre"},
-        {"$facet": {
-            "byRating": [
-                {"$group": {
-                    "_id": {"rating": "$rating", "state": "$joinedReviews.review_state"},
-                    "count": {"$sum": 1},
-                }},
-            ],
-            "byGenre": [
-                {"$group": {
-                    "_id": {"genre": "$genre", "state": "$joinedReviews.review_state"},
-                    "count": {"$sum": 1},
-                }},
-            ],
+        {"$group": {
+            "_id": "$joinedReviews.critic_name",
+            "reviewCount": {"$sum": 1},
+            "avgReviewScore": {"$avg": "$joinedReviews.review_score"},
+            "avgMovieTomato": {"$avg": "$tomatoMeter"},
         }},
+        {"$match": {"reviewCount": {"$gte": 50}}},
+        {"$sort": {"avgReviewScore": 1}},
     ]
-    return "Marija_Q4_OPT_fresh_rotten_po_ratingu_i_zanru_LOOKUP", pipeline, "movies_with_stats"
+    return "Marija_Q3_OPT_najstroziji_kriticari_LOOKUP", pipeline, "movies_with_stats"
 
 
-def q5_publishers_deviating_from_consensus(years_back: int = 10, reference_date=None):
+def q4_sentiment_vs_score():
     """
-    INDEKS: { tomatoMeter: 1 }
-    $match {tomatoMeter >= 0} PRVA faza -> IXSCAN. Odstupanje od konsenzusa
-    (tomatoMeter) ima smisla samo za filmove sa poznatim konsenzusom.
-    Filter po datumu recenzije se primenjuje nakon $unwind nad ugnježdenim nizom.
+    OPTIMIZACIJA: MULTIKEY indeks nad UGNJEŽDENIM poljem {reviews.scoreSentiment:1}.
+    $match {reviews.scoreSentiment postoji} PRVA faza -> IXSCAN preko multikey
+    indeksa nad nizom recenzija. Grupiše po scoreSentiment oznaci.
     """
-    if reference_date is None:
-        reference_date = datetime.utcnow()
-    cutoff = reference_date - timedelta(days=365 * years_back)
-
     pipeline = [
-        {"$match": {"tomatoMeter": {"$gte": 0}}},
+        {"$match": {"reviews.scoreSentiment": {"$exists": True}}},
         {"$unwind": "$reviews"},
-        {"$match": {"reviews.review_date": {"$gte": cutoff}}},
-        {"$project": {
-            "publisher_name": "$reviews.publisher_name",
-            "deviation": {
-                "$abs": {"$subtract": [
-                    {"$multiply": ["$reviews.review_score", 100]},
-                    "$tomatoMeter",
-                ]}
+        {"$group": {
+            "_id": "$reviews.scoreSentiment",
+            "totalReviews": {"$sum": 1},
+            "avgReviewScore": {"$avg": "$reviews.review_score"},
+            "avgTomatoMeter": {"$avg": "$tomatoMeter"},
+        }},
+        {"$sort": {"totalReviews": -1}},
+    ]
+    return "Marija_Q4_OPT_sentiment_vs_ocena", pipeline, "movies_with_stats"
+
+
+def q5_quality_distribution_bucket():
+    """
+    OPTIMIZACIJA: PARTIAL indeks {tomatoMeter:1} (indeks samo nad dokumentima
+    sa reviewCount >= 10) + $bucket. Partial indeks je manji (indeksira samo
+    filmove sa dovoljno recenzija), pa je i brži. $match {reviewCount >= 10}
+    -> IXSCAN preko partial indeksa, potom $bucket po opsezima tomatoMeter-a.
+    """
+    pipeline = [
+        {"$match": {"reviewCount": {"$gte": 10}}},
+        {"$bucket": {
+            "groupBy": "$tomatoMeter",
+            "boundaries": [0, 20, 40, 60, 80, 101],
+            "default": "Ostalo",
+            "output": {
+                "movieCount": {"$sum": 1},
+                "avgAudienceScore": {"$avg": "$audienceScore"},
+                "avgReviewCount": {"$avg": "$reviewCount"},
             },
         }},
-        {"$group": {
-            "_id": "$publisher_name",
-            "avgDeviation": {"$avg": "$deviation"},
-            "reviewCount": {"$sum": 1},
-        }},
-        {"$match": {"reviewCount": {"$gte": 20}}},
-        {"$sort": {"avgDeviation": -1}},
     ]
-    return "Marija_Q5_OPT_publikacije_odstupanje", pipeline, "movies_with_stats"
+    return "Marija_Q5_OPT_distribucija_kvaliteta", pipeline, "movies_with_stats"
 
 
 ALL_QUERIES = [
-    q1_studios_highest_audience_lowest_variance,
-    q2_biggest_gap_movies_by_genre,
-    q3_certified_fresh_effect_by_genre,
-    q4_fresh_rotten_distribution_by_rating_and_genre,
-    q5_publishers_deviating_from_consensus,
+    q1_studios_activity_quality,
+    q2_reception_by_mpaa_rating,
+    q3_strictest_critics,
+    q4_sentiment_vs_score,
+    q5_quality_distribution_bucket,
 ]
