@@ -1,17 +1,22 @@
 """
 Izgradnja optimizovane, denormalizovane kolekcije `movies_with_stats` iz
-postojećih `movies` + `reviews` kolekcija
-Koristi $merge da rezultat agregacionog pipeline-a upiše direktno u novu kolekciju .
+postojecih `movies` + `reviews` kolekcija.
+
+Za svaki film se preko $lookup-a spajaju sve njegove recenzije, pa se u istom
+dokumentu pred-izracunavaju agregatne vrednosti (broj recenzija, fresh/rotten,
+broj top-kriticara, prosecna ocena) i ugnjezdava ceo niz recenzija. Rezultat
+se preko $merge upisuje u novu kolekciju `movies_with_stats`.
+
+Ovim sam omogucila da  upiti nad ovom kolekcijom ne moraju vise da rade $lookup ka reviews - sve
+sto im treba je vec u dokumentu filma (denormalizacija).
 
 """
+
 import argparse
 from pymongo import MongoClient
 
-# Koliko najnovijih recenzija ugnježdavamo po filmu 
-EMBEDDED_REVIEWS_LIMIT = 50
 
-
-def build_pipeline(embedded_limit: int) -> list[dict]:
+def build_pipeline() -> list[dict]:
     return [
         {"$lookup": {
             "from": "reviews",
@@ -46,8 +51,10 @@ def build_pipeline(embedded_limit: int) -> list[dict]:
                 }
             },
             "avgReviewScore": {"$avg": "$allReviews.review_score"},
-            # Ugnježdavamo samo poslednjih N recenzija (sortirano po datumu)
-            # da ne bismo probili 16MB limit za blockbuster filmove.
+            # Ugnjezdavamo sve recenzije filma, sortirane po datumu (najnovije
+            # prve). Nijedan film nema dovoljno recenzija da bi se dokument
+            # priblizio MongoDB 16MB limitu (najveci ima oko 600 recenzija),
+            # pa limitiranje broja ugnjezdenih recenzija nije potrebno.
             "reviews": {
                 "$sortArray": {
                     "input": "$allReviews",
@@ -56,8 +63,8 @@ def build_pipeline(embedded_limit: int) -> list[dict]:
             },
         }},
         {"$project": {
-            "allReviews": 0,  # uklanjamo privremeno polje - ceo skup ostaje u `reviews` kolekciji
-            "reviews.ratingKey": 0,
+            "allReviews": 0,        # uklanjamo privremeno polje sa lookup-a
+            "reviews.ratingKey": 0,  # suvisno u ugnjezdenim recenzijama (isto kao film)
             "reviews._id": 0,
         }},
         {"$merge": {
@@ -69,19 +76,18 @@ def build_pipeline(embedded_limit: int) -> list[dict]:
     ]
 
 
-def build_movies_with_stats(db, embedded_limit: int) -> None:
-    print(f"Pravim movies_with_stats (embedded_limit={embedded_limit} recenzija po filmu)...")
-    db.movies.aggregate(build_pipeline(embedded_limit))
+def build_movies_with_stats(db) -> None:
+    print("Pravim movies_with_stats (denormalizacija: ugnjezdene recenzije + agregati)...")
+    db.movies.aggregate(build_pipeline())
     count = db.movies_with_stats.count_documents({})
-    print(f"Završeno. movies_with_stats sada sadrži {count:,} dokumenata.")
+    print(f"Zavrseno. movies_with_stats sada sadrzi {count:,} dokumenata.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mongo-uri", default="mongodb://localhost:27017")
     parser.add_argument("--db", default="rt_analytics")
-    parser.add_argument("--embedded-limit", type=int, default=EMBEDDED_REVIEWS_LIMIT)
     args = parser.parse_args()
 
     client = MongoClient(args.mongo_uri)
-    build_movies_with_stats(client[args.db], args.embedded_limit)
+    build_movies_with_stats(client[args.db])
