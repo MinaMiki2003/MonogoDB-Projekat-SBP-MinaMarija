@@ -20,7 +20,7 @@ optimizovano i izmereno pre/posle. Pitanja su malo izmenjena u odnosu na inicija
 ## Struktura projekta
 ```
 project/
-├── data/raw/            CSV fajlovi sa Kaggle-a (NISU na git-u, vidi .gitignore)
+├── data/raw/            CSV fajlovi sa Kaggle-a (NISU na git-u)
 ├── scripts/
 │   ├── etl.py                       ucitavanje i ciscenje CSV -> MongoDB
 │   ├── build_movies_with_stats.py   pravljenje denormalizovane kolekcije
