@@ -42,7 +42,7 @@ def q2_reception_by_mpaa_rating():
     Grupiše po MPAA rating-u iz ugnježdenih recenzija.
     """
     pipeline = [
-        {"$match": {"rating": {"$ne": None}}},
+        {"$match": {"rating": {"$nin": [None, "Unknown"]}}},
         {"$unwind": "$reviews"},
         {"$group": {
             "_id": "$rating",
@@ -105,10 +105,9 @@ def q4_sentiment_vs_score():
 
 def q5_quality_distribution_bucket():
     """
-    OPTIMIZACIJA: PARTIAL indeks {tomatoMeter:1} (indeks samo nad dokumentima
-    sa reviewCount >= 10) + $bucket. Partial indeks je manji (indeksira samo
-    filmove sa dovoljno recenzija), pa je i brži. $match {reviewCount >= 10}
-    -> IXSCAN preko partial indeksa, potom $bucket po opsezima tomatoMeter-a.
+    OPTIMIZACIJA: PARTIAL indeks {tomatoMeter} + $bucket.
+    $match {reviewCount>=10} -> IXSCAN, $bucket deli u opsege, $project pravi
+    čitljive labele opsega, $sort poređa.
     """
     pipeline = [
         {"$match": {"reviewCount": {"$gte": 10}}},
@@ -119,12 +118,28 @@ def q5_quality_distribution_bucket():
             "output": {
                 "movieCount": {"$sum": 1},
                 "avgAudienceScore": {"$avg": "$audienceScore"},
-                "avgReviewCount": {"$avg": "$reviewCount"},
             },
         }},
+        {"$project": {
+            "opseg": {
+                "$switch": {
+                    "branches": [
+                        {"case": {"$eq": ["$_id", 0]}, "then": "0-20 (loši)"},
+                        {"case": {"$eq": ["$_id", 20]}, "then": "20-40"},
+                        {"case": {"$eq": ["$_id", 40]}, "then": "40-60"},
+                        {"case": {"$eq": ["$_id", 60]}, "then": "60-80"},
+                        {"case": {"$eq": ["$_id", 80]}, "then": "80-100 (odlični)"},
+                    ],
+                    "default": "Ostalo",
+                }
+            },
+            "brojFilmova": "$movieCount",
+            "prosecnaOcenaPublike": {"$round": ["$avgAudienceScore", 1]},
+            "_id": 0,
+        }},
+        {"$sort": {"brojFilmova": 1}},
     ]
     return "Marija_Q5_OPT_distribucija_kvaliteta", pipeline, "movies_with_stats"
-
 
 ALL_QUERIES = [
     q1_studios_activity_quality,
