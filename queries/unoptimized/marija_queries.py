@@ -2,14 +2,9 @@
 Agregacioni upiti - MARIJA OLIĆ (uloga: analitičar podataka)
 Šema: NEOPTIMIZOVANA (movies + reviews kolekcije, $lookup za spajanje)
 
-Svaka funkcija vraća (naziv, pipeline, collection_name) - pipeline se izvršava
-nad navedenom kolekcijom. Pokretanje i merenje performansi vrši se kroz
+
 scripts/run_performance_analysis.py
 
-NAPOMENA O MERENJU (tačka 6 - uporedna analiza):
-Ovi upiti se mere nad NEINDEKSIRANOM bazom (samo podrazumevani _id indeks).
-Tek nakon merenja se pokreće create_indexes.py + build_movies_with_stats.py,
-pa se mere optimizovane verzije. Time se dobija poštena "pre/posle" slika.
 """
 
 from datetime import datetime
